@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arrowbound: One Flight</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #1a1a1a;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        canvas {
+            background-color: #111;
+            border: 4px solid #444;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        #ui {
+            margin-top: 15px;
+            text-align: center;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <div id="ui">Используйте стрелочки <b>Влево / Вправо</b> для управления полетом. Цель — желтый круг.</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// Состояние игры
+let gameActive = true;
+let gameWon = false;
+let score = 0;
+
+// Параметры стрелы
+let arrow = {
+    x: 80,
+    y: 250,
+    radius: 5,
+    angle: 0, // в радианах
+    speed: 4,
+    turnSpeed: 0.05,
+    trail: []
+};
+
+// Цель (Мишень)
+let target = { x: 720, y: 250, radius: 20 };
+
+// Препятствия (стены)
+let obstacles = [
+    { x: 300, y: 0, width: 40, height: 200 },
+    { x: 500, y: 300, width: 40, height: 200 },
+    { x: 400, y: 180, width: 40, height: 140 }
+];
+
+// Управление
+let keys = {};
+window.addEventListener("keydown", (e) => keys[e.key] = true);
+window.addEventListener("keyup", (e) => keys[e.key] = false);
+
+// Проверка столкновения окружности и прямоугольника
+function rectCircleColliding(circle, rect) {
+    let distX = Math.abs(circle.x - rect.x - rect.width / 2);
+    let distY = Math.abs(circle.y - rect.y - rect.height / 2);
+
+    if (distX > (rect.width / 2 + circle.radius)) { return false; }
+    if (distY > (rect.height / 2 + circle.radius)) { return false; }
+
+    if (distX <= (rect.width / 2)) { return true; }
+    if (distY <= (rect.height / 2)) { return true; }
+
+    let dx = distX - rect.width / 2;
+    let dy = distY - rect.height / 2;
+    return (dx * dx + dy * dy <= (circle.radius * circle.radius));
+}
+
+// Перезапуск уровня
+function resetGame() {
+    arrow.x = 80;
+    arrow.y = 250;
+    arrow.angle = 0;
+    arrow.trail = [];
+    gameActive = true;
+    gameWon = false;
+}
+
+// Главный игровой цикл
+function update() {
+    if (gameActive) {
+        // Повороты
+        if (keys["ArrowLeft"]) arrow.angle -= arrow.turnSpeed;
+        if (keys["ArrowRight"]) arrow.angle += arrow.turnSpeed;
+
+        // Движение вперед
+        arrow.x += Math.cos(arrow.angle) * arrow.speed;
+        arrow.y += Math.sin(arrow.angle) * arrow.speed;
+
+        // Добавление следа
+        arrow.trail.push({ x: arrow.x, y: arrow.y });
+        if (arrow.trail.length > 40) arrow.trail.shift();
+
+        // Столкновение со стенами экрана
+        if (arrow.x < 0 || arrow.x > canvas.width || arrow.y < 0 || arrow.y > canvas.height) {
+            gameActive = false;
+        }
+
+        // Столкновение с препятствиями
+        obstacles.forEach(obs => {
+            if (rectCircleColliding(arrow, obs)) {
+                gameActive = false;
+            }
+        });
+
+        // Проверка победы (долетели до цели)
+        let distToTarget = Math.hypot(arrow.x - target.x, arrow.y - target.y);
+        if (distToTarget < target.radius + arrow.radius) {
+            gameActive = false;
+            gameWon = true;
+            score++;
+        }
+    } else {
+        // Если игра завершена, нажатие Пробела перезапускает её
+        if (keys[" "]) {
+            resetGame();
+        }
+    }
+
+    render();
+    requestAnimationFrame(update);
+}
+
+// Отрисовка графики
+function render() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Отрисовка препятствий
+    ctx.fillStyle = "#ff4757";
+    obstacles.forEach(obs => {
+        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+    });
+
+    // Отрисовка мишени
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, target.radius, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffa502";
+    ctx.fill();
+    ctx.closePath();
+
+    // Отрисовка шлейфа стрелы
+    if (arrow.trail.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(arrow.trail[0].x, arrow.trail[0].y);
+        for (let i = 1; i < arrow.trail.length; i++) {
+            ctx.lineTo(arrow.trail[i].x, arrow.trail[i].y);
+        }
+        ctx.strokeStyle = "rgba(52, 152, 219, 0.4)";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+    }
+
+    // Отрисовка самой стрелы (треугольник)
+    ctx.save();
+    ctx.translate(arrow.x, arrow.y);
+    ctx.rotate(arrow.angle);
+    ctx.beginPath();
+    ctx.moveTo(12, 0);
+    ctx.lineTo(-8, -6);
+    ctx.lineTo(-8, 6);
+    ctx.fillStyle = "#3498db";
+    ctx.fill();
+    ctx.restore();
+
+    // Экраны завершения игры
+    if (!gameActive) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.font = "30px Arial";
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "center";
+
+        if (gameWon) {
+            ctx.fillStyle = "#2ed573";
+            ctx.fillText("ЦЕЛЬ ПОРАЖЕНА!", canvas.width / 2, canvas.height / 2 - 20);
+        } else {
+            ctx.fillStyle = "#ff4757";
+            ctx.fillText("СТРЕЛА РАЗБИЛАСЬ", canvas.width / 2, canvas.height / 2 - 20);
+        }
+
+        ctx.font = "20px Arial";
+        ctx.fillStyle = "#aaa";
+        ctx.fillText("Нажмите ПРОБЕЛ, чтобы запустить снова", canvas.width / 2, canvas.height / 2 + 30);
+    }
+}
+
+// Старт игры
+update();
+</script>
+</body>
+</html>
